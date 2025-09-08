@@ -1,0 +1,11 @@
+{
+  "users": [
+    {
+      "id": "025a418b-4ed5-4742-916b-e362ffe5c389",
+      "name": "jay",
+      "email": "jpatel4224@gmail.com",
+      "passwordHash": "$2a$10$k/TvGOF5/kcGNlwEePVYj.Z1eKIDhAiBo3BKfvzcDWOKY8PyvRZmW",
+      "cart": []
+    }
+  ]
+}

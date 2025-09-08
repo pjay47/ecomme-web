@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ShopSphere — E‑commerce SPA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    .card { box-shadow: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05); }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const api = {
+      async request(path, method="GET", body, auth=true) {
+        const headers = { "Content-Type": "application/json" };
+        const token = localStorage.getItem("token");
+        if (auth && token) headers["Authorization"] = "Bearer " + token;
+        const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.statusText }));
+          throw new Error(err.error || "Request failed");
+        }
+        return res.json();
+      },
+      signup(d) { return this.request("/api/auth/signup", "POST", d, false); },
+      login(d) { return this.request("/api/auth/login", "POST", d, false); },
+      items(params={}) {
+        const q = new URLSearchParams(params).toString();
+        return this.request("/api/items" + (q ? `?${q}` : ""), "GET", null, false);
+      },
+      cart() { return this.request("/api/cart"); },
+      addToCart(itemId, qty=1){ return this.request("/api/cart/add", "POST", { itemId, qty }); },
+      removeFromCart(itemId){ return this.request("/api/cart/remove", "POST", { itemId }); },
+    };
+
+    function useAuth() {
+      const [user, setUser] = React.useState(() => {
+        const u = localStorage.getItem("user");
+        return u ? JSON.parse(u) : null;
+      });
+      const login = async (email, password) => {
+        const { token, user } = await api.login({ email, password });
+        localStorage.setItem("token", token);
+        localStorage.setItem("user", JSON.stringify(user));
+        setUser(user);
+      };
+      const signup = async (name, email, password) => {
+        const { token, user } = await api.signup({ name, email, password });
+        localStorage.setItem("token", token);
+        localStorage.setItem("user", JSON.stringify(user));
+        setUser(user);
+      };
+      const logout = () => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        setUser(null);
+      };
+      return { user, login, signup, logout };
+    }
+
+    function Navbar({ user, onLogout, navigate, cartCount }) {
+      return (
+        <header className="bg-white sticky top-0 z-20 border-b">
+          <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span onClick={() => navigate("home")} className="text-xl font-bold text-indigo-600 cursor-pointer">ShopSphere</span>
+              <nav className="hidden md:flex items-center gap-4 text-sm text-gray-600">
+                <button onClick={() => navigate("home")} className="hover:text-indigo-600">Home</button>
+                <button onClick={() => navigate("cart")} className="hover:text-indigo-600">Cart</button>
+              </nav>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => navigate("cart")} className="relative inline-flex items-center px-3 py-1.5 rounded-xl border">
+                <span className="material-icons mr-1">shopping_cart</span>
+                <span>Cart</span>
+                <span className="ml-2 inline-flex items-center justify-center w-6 h-6 rounded-full bg-indigo-600 text-white text-xs">{cartCount}</span>
+              </button>
+              {user ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-700">Hi, {user.name}</span>
+                  <button onClick={onLogout} className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200">Logout</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button onClick={() => navigate("login")} className="px-3 py-1.5 rounded-xl bg-indigo-600 text-white">Login</button>
+                  <button onClick={() => navigate("signup")} className="px-3 py-1.5 rounded-xl bg-white border">Sign up</button>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+      );
+    }
+
+    function Filters({ filters, setFilters, categories }) {
+      const onChange = (k, v) => setFilters(prev => ({ ...prev, [k]: v }));
+      return (
+        <div className="bg-white p-4 rounded-2xl border card">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input className="border rounded-xl px-3 py-2" placeholder="Search..." value={filters.q || ""} onChange={e=>onChange("q", e.target.value)}/>
+            <select className="border rounded-xl px-3 py-2" value={filters.category || ""} onChange={e=>onChange("category", e.target.value)}>
+              <option value="">All Categories</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input className="border rounded-xl px-3 py-2" type="number" placeholder="Min Price" value={filters.minPrice || ""} onChange={e=>onChange("minPrice", e.target.value)}/>
+            <input className="border rounded-xl px-3 py-2" type="number" placeholder="Max Price" value={filters.maxPrice || ""} onChange={e=>onChange("maxPrice", e.target.value)}/>
+          </div>
+        </div>
+      );
+    }
+
+    function ProductCard({ item, onAdd }) {
+      return (
+        <div className="bg-white rounded-2xl border card overflow-hidden flex flex-col">
+          <img src={item.image || "https://picsum.photos/seed/placeholder/400/300"} alt={item.title} className="w-full h-40 object-cover"/>
+          <div className="p-4 flex-1 flex flex-col">
+            <h3 className="font-semibold text-gray-900">{item.title}</h3>
+            <p className="text-sm text-gray-500 mt-1 line-clamp-2">{item.description}</p>
+            <div className="mt-auto flex items-center justify-between pt-3">
+              <span className="text-lg font-bold">₹{(item.price * 83).toFixed(0)}</span>
+              <button onClick={()=>onAdd(item)} className="px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Add to cart</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function Home({ user, navigate, setCartCount }) {
+      const [filters, setFilters] = React.useState({});
+      const [items, setItems] = React.useState([]);
+      const [loading, setLoading] = React.useState(true);
+      const [error, setError] = React.useState("");
+      const categories = React.useMemo(() => {
+        const set = new Set(items.map(i => i.category));
+        return Array.from(set);
+      }, [items]);
+
+      const load = async () => {
+        setLoading(true);
+        try {
+          const { items } = await api.items(filters);
+          setItems(items);
+          setError("");
+        } catch (e) {
+          setError(e.message);
+        } finally { setLoading(false); }
+      };
+      React.useEffect(() => { load(); }, []);
+      React.useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [filters]);
+
+      const add = async (item) => {
+        if (!user) { navigate("login"); return; }
+        await api.addToCart(item.id, 1);
+        const { cart } = await api.cart();
+        setCartCount(cart.reduce((a,c)=>a+c.qty,0));
+      };
+
+      return (
+        <div className="max-w-6xl mx-auto px-4 py-6 space-y-4">
+          <Filters filters={filters} setFilters={setFilters} categories={["Audio","Computers","Wearables","Accessories"]}/>
+          {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">{error}</div>}
+          {loading ? <div className="text-center text-gray-500">Loading products...</div> : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {items.map(i => <ProductCard key={i.id} item={i} onAdd={add}/>)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function Login({ onLogin }) {
+      const [email, setEmail] = React.useState("");
+      const [password, setPassword] = React.useState("");
+      const [error, setError] = React.useState("");
+      const submit = async (e) => {
+        e.preventDefault();
+        try {
+          await onLogin(email, password);
+        } catch (e) { setError(e.message); }
+      };
+      return (
+        <div className="max-w-md mx-auto px-4 py-8">
+          <div className="bg-white border rounded-2xl p-6 card">
+            <h2 className="text-xl font-semibold mb-4">Log in</h2>
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl mb-3">{error}</div>}
+            <form onSubmit={submit} className="space-y-3">
+              <input className="w-full border rounded-xl px-3 py-2" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} />
+              <input className="w-full border rounded-xl px-3 py-2" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} />
+              <button className="w-full px-3 py-2 rounded-xl bg-indigo-600 text-white">Log in</button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    function Signup({ onSignup }) {
+      const [name, setName] = React.useState("");
+      const [email, setEmail] = React.useState("");
+      const [password, setPassword] = React.useState("");
+      const [error, setError] = React.useState("");
+      const submit = async (e) => {
+        e.preventDefault();
+        try {
+          await onSignup(name, email, password);
+        } catch (e) { setError(e.message); }
+      };
+      return (
+        <div className="max-w-md mx-auto px-4 py-8">
+          <div className="bg-white border rounded-2xl p-6 card">
+            <h2 className="text-xl font-semibold mb-4">Create account</h2>
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl mb-3">{error}</div>}
+            <form onSubmit={submit} className="space-y-3">
+              <input className="w-full border rounded-xl px-3 py-2" placeholder="Name" value={name} onChange={e=>setName(e.target.value)} />
+              <input className="w-full border rounded-xl px-3 py-2" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} />
+              <input className="w-full border rounded-xl px-3 py-2" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} />
+              <button className="w-full px-3 py-2 rounded-xl bg-indigo-600 text-white">Sign up</button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    function Cart({ refreshCart, cart, remove, total }) {
+      return (
+        <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+          <h2 className="text-xl font-semibold">Your Cart</h2>
+          <div className="bg-white border rounded-2xl card">
+            {cart.length === 0 ? <div className="p-6 text-gray-500">Your cart is empty</div> : (
+              <ul className="divide-y">
+                {cart.map(ci => (
+                  <li key={ci.item.id} className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <img src={ci.item.image} className="w-20 h-16 object-cover rounded-xl border" />
+                      <div>
+                        <div className="font-medium">{ci.item.title}</div>
+                        <div className="text-sm text-gray-500">Qty: {ci.qty} · ₹{(ci.item.price*83).toFixed(0)}</div>
+                      </div>
+                    </div>
+                    <button onClick={()=>remove(ci.item.id)} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50">Remove</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="flex items-center justify-end">
+            <div className="text-lg font-semibold">Total: ₹{(total*83).toFixed(0)}</div>
+          </div>
+        </div>
+      );
+    }
+
+    function App() {
+      const { user, login, signup, logout } = useAuth();
+      const [route, setRoute] = React.useState("home");
+      const [cart, setCart] = React.useState([]);
+      const [cartCount, setCartCount] = React.useState(0);
+
+      const navigate = (to) => setRoute(to);
+
+      const refreshCart = async () => {
+        if (!localStorage.getItem("token")) { setCart([]); setCartCount(0); return; }
+        try {
+          const { cart } = await api.cart();
+          setCart(cart);
+          setCartCount(cart.reduce((a,c)=>a+c.qty,0));
+        } catch (e) {
+          // token expired etc.
+          console.log(e.message);
+        }
+      };
+
+      React.useEffect(() => { if (user) refreshCart(); }, [user]);
+
+      const remove = async (id) => { await api.removeFromCart(id); refreshCart(); };
+
+      React.useEffect(() => {
+        window.onhashchange = () => {
+          const page = location.hash.replace("#","") || "home";
+          setRoute(page);
+        };
+        window.onhashchange();
+      }, []);
+
+      React.useEffect(() => {
+        if (route === "cart") refreshCart();
+      }, [route]);
+
+      return (
+        <div>
+          <Navbar user={user} onLogout={logout} navigate={(p)=>{location.hash = p}} cartCount={cartCount} />
+          {route === "home" && <Home user={user} navigate={(p)=>{location.hash=p}} setCartCount={setCartCount}/>}
+          {route === "login" && !user && <Login onLogin={login} />}
+          {route === "signup" && !user && <Signup onSignup={signup} />}
+          {route === "cart" && user && <Cart refreshCart={refreshCart} cart={cart} remove={remove} total={cart.reduce((a,c)=>a+c.item.price*c.qty,0)} />}
+          {route !== "cart" && !user && route !== "login" && route !== "signup" && (
+            <div className="max-w-6xl mx-auto px-4 pb-8">
+              <div className="mt-6 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl">
+                Tip: Create an account or log in to add items to your cart. Your cart persists even after you log out.
+              </div>
+            </div>
+          )}
+          <footer className="text-center text-sm text-gray-500 py-6">© {new Date().getFullYear()} ShopSphere</footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  </script>
+</body>
+</html>
